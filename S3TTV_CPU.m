@@ -1,8 +1,8 @@
 %% Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping
 %% =========================== First part notes===========================
-% Author: Shingo Takemoto (takemoto.s.af@m.titech.ac.jp)
-% Last version: April 4, 2024
-% Article: S. Takemoto, S. Ono, 
+% Author: Shingo Takemoto (takemoto.s.e908@m.isct.ac.jp)
+% Last version: June 15, 2025
+% Article: S. Takemoto, K. Naganuma, S. Ono, 
 %   ``Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping''
 % -------------------------------------------------------------------------
 %% =========================== Second part notes =========================== 

@@ -1,7 +1,7 @@
 %% Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping
 %% =========================== First part notes===========================
-% Author: Shingo Takemoto (takemoto.s.af@m.titech.ac.jp)
-% Last version: June 16, 2025
+% Author: Shingo Takemoto (takemoto.s.e908@m.isct.ac.jp)
+% Last version: June 15, 2025
 % Article: S. Takemoto, K. Naganuma, S. Ono, 
 %   ``Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping''
 % -------------------------------------------------------------------------
@@ -59,6 +59,8 @@ T = zeros([n1, n2, n3], 'single', 'gpuArray');
 Y1 = zeros([n1, n2, n3, 2, blocksize(1), blocksize(2)], 'single', 'gpuArray');
 Y2 = zeros([n1, n2, n3], 'single', 'gpuArray');
 Y3 = zeros([n1, n2, n3], 'single', 'gpuArray');
+Y4 = zeros([n1, n2, n3], 'single', 'gpuArray');
+Y5 = zeros([n1, n2, n3], 'single', 'gpuArray');
 
 
 %% Setting operators
@@ -76,12 +78,14 @@ Pt = @(z) func_PeriodicExpansionTrans(z);
 
 
 %% Setting stepsize parameters for P-PDS
-gamma1_U    = gpuArray(single(1./(prod(blocksize) * 2*2 * 2 + 1)));
+gamma1_U    = gpuArray(single(1./(prod(blocksize)/prod(shiftstep) * 2*2 * 2 + 1))); % P*D*Ds + I
 gamma1_S    = gpuArray(single(1));
 gamma1_T    = gpuArray(single(1/(2 + 1)));
 gamma2_Y1   = gpuArray(single(1/(2*2)));
-gamma2_Y2   = gpuArray(single(1/3));
-gamma2_Y3   = gpuArray(single(1/2));
+gamma2_Y2   = gpuArray(single(1));
+gamma2_Y3   = gpuArray(single(1));
+gamma2_Y4   = gpuArray(single(1));
+gamma2_Y5   = gpuArray(single(1/2));
 
 
 %% main loop (P-PDS)
@@ -90,23 +94,24 @@ fprintf('~~~ P-PDS STARTS ~~~\n');
 
 for i = 1:maxiter   
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Updating U
+    % Updating U, S, T
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     U_tmp   = U - gamma1_U.*(Dst(Dt(Pt(Y1))) + Y2);
-    U_next  = ProjBox(U_tmp, 0, 1);
+    S_tmp   = S - gamma1_S.*Y3;
+    T_tmp   = T - gamma1_T.*(Y4 + Dvt(Y5));
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Updating S
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    S_tmp   = S - gamma1_S.*Y2;
-    S_next  = ProjFastL1Ball(S_tmp, alpha);
+    Primal_sum = U_tmp + S_tmp + T_tmp;
+    Primal_sum = ProjL2ball(Primal_sum, HSI_noisy_gpu, epsilon) - Primal_sum;
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Updating T
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    T_tmp   = T - gamma1_T.*(Y2 + Dvt(Y3));
-    T_next  = ProjFastL1Ball(T_tmp, beta);
-    
+    U_next = U_tmp + Primal_sum/3;
+    S_next = S_tmp + Primal_sum/3;
+    T_next = T_tmp + Primal_sum/3;
+
+    U_res = 2*U_next - U;
+    S_res = 2*S_next - S;
+    T_res = 2*T_next - T;
+
+
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Updating Y1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -116,13 +121,25 @@ for i = 1:maxiter
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Updating Y2
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Y2_tmp  = Y2 + gamma2_Y2.*(2*(U_next + S_next + T_next) - (U + S + T));    
-    Y2_next = Y2_tmp - gamma2_Y2.*ProjL2ball(Y2_tmp./gamma2_Y2, HSI_noisy, epsilon);
+    Y2_tmp  = Y2 + gamma2_Y2.*U_res;
+    Y2_next = Y2_tmp - gamma2_Y2*ProjBox(Y2_tmp/gamma2_Y2, 0, 1);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Updating Y3
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Y3_next = Y3 + gamma2_Y3.*Dv(2*T_next - T);
+    Y3_tmp  = Y3 + gamma2_Y3.*S_res;
+    Y3_next = Y3_tmp - gamma2_Y3.*ProjFastL1Ball(Y3_tmp./gamma2_Y3, alpha);
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Updating Y4
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Y4_tmp  = Y4 + gamma2_Y4.*T_res;
+    Y4_next = Y4_tmp - gamma2_Y4*ProjFastL1Ball(Y4_tmp/gamma2_Y4, beta);
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Updating Y5
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Y5_next = Y5 + gamma2_Y5.*Dv(T_res);
 
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -140,6 +157,8 @@ for i = 1:maxiter
     Y1  = Y1_next;
     Y2  = Y2_next;
     Y3  = Y3_next;
+    Y4  = Y4_next;
+    Y5  = Y5_next;
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Convergence checking
