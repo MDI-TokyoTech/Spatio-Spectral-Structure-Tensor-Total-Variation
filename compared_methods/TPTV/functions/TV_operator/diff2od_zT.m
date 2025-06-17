@@ -1,0 +1,12 @@
+function tv_zT = diff2od_zT(a, sizeD)
+n    = prod(sizeD);
+tenZ = reshape(a(1:n), sizeD);
+dfz     = diff(tenZ, 2, 3);
+dfzT   = zeros(sizeD);
+% dfzT(:,:,1)     =  tenZ(:,:,1) - 2*tenZ(:,:,end) + tenZ(:,:,end-1);
+% dfzT(:,:,2)     =  tenZ(:,:,end) - 2*tenZ(:,:,1) + tenZ(:,:,1);
+% dfzT(:,:,3:end) = dfz;
+dfzT(:,:,1)     =  -tenZ(:,:,1) +2*tenZ(:,:,end) - tenZ(:,:,end-1);
+dfzT(:,:,2)     =  -tenZ(:,:,end) +2*tenZ(:,:,1) - tenZ(:,:,1);
+dfzT(:,:,3:end) = -dfz;
+tv_zT=dfzT(:);
