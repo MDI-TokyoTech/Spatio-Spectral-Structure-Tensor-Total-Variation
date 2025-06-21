@@ -51,7 +51,6 @@ params.blocksize = [10,10]; % Block size of S3TTV
 
 params.stopcri = 1e-5; % Stopping criterion
 params.maxiter = 20000; % Maximum number of iterations
-params.disprate = 100; % Period to display intermediate results
 
 use_GPU = 1; % 1, if you use GPU, 0, if you use CPU
 use_fast = 1; % 1, if you use Fast algorithm, 0, if you use Standard algorithm
@@ -83,7 +82,7 @@ fprintf('Blocksize: (%d, %d)\n', params.blocksize(1), params.blocksize(2))
 %% Denoising and destriping
 if use_fast == 1
     if use_GPU == 1
-        [HSI_restored, ~, ~, ~] = S3TTV_GPU_fast(HSI_noisy, params); % for GPU user
+        [HSI_restored, ~, ~, ~] = S3TTV_GPU_veryfast(HSI_noisy, params); % for GPU user
     elseif use_GPU == 0
         [HSI_restored, ~, ~, ~] = S3TTV_CPU_fast(HSI_noisy, params); % for CPU user
     else

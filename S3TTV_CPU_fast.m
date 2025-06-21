@@ -24,6 +24,7 @@
 
 function [HSI_restored, removed_noise, iteration, converge_rate_U] ...
      = S3TTV_CPU_fast(HSI_noisy, params)
+fprintf('** Running S3TTV_CPU_fast **\n');
 HSI_noisy = single(HSI_noisy);
 [n1, n2, n3] = size(HSI_noisy);
 
@@ -33,7 +34,9 @@ epsilon     = single(params.epsilon);
 blocksize   = single(params.blocksize);
 maxiter     = single(params.maxiter);
 stopcri     = single(params.stopcri);
-disprate    = single(params.disprate);
+
+%% Setting params
+disprate    = gpuArray(single(100));
 
 
 %% Initializing primal and dual variables
@@ -78,7 +81,7 @@ Pt = @(z) func_PeriodicExpansionTrans(z);
 
 
 %% Setting stepsize parameters for P-PDS
-gamma1_U    = single(1./(prod(blocksize)/prod(shiftstep) * 2*2 * 2 + 1)); % P*D*Ds + I
+gamma1_U    = single(1./(prod(blocksize) * 2*2 * 2 + 1)); % P*D*Ds + I
 gamma1_S    = single(1);
 gamma1_T    = single(1/(2 + 1));
 gamma2_Y1   = single(1/(2*2));
@@ -101,7 +104,7 @@ for i = 1:maxiter
     T_tmp   = T - gamma1_T.*(Y4 + Dvt(Y5));
 
     Primal_sum = U_tmp + S_tmp + T_tmp;
-    Primal_sum = ProjL2ball(Primal_sum, HSI_noisy_gpu, epsilon) - Primal_sum;
+    Primal_sum = ProjL2ball(Primal_sum, HSI_noisy, epsilon) - Primal_sum;
 
     U_next = U_tmp + Primal_sum/3;
     S_next = S_tmp + Primal_sum/3;

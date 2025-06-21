@@ -24,6 +24,7 @@
 
 function [HSI_restored, removed_noise, iteration, converge_rate_U] ...
      = S3TTV_GPU(HSI_noisy, params)
+fprintf('** Running S3TTV_GPU **\n');
 HSI_noisy = gpuArray(single(HSI_noisy));
 [n1, n2, n3] = size(HSI_noisy);
 
@@ -33,7 +34,9 @@ epsilon     = gpuArray(single(params.epsilon));
 blocksize   = gpuArray(single(params.blocksize));
 maxiter     = gpuArray(single(params.maxiter));
 stopcri     = gpuArray(single(params.stopcri));
-disprate    = gpuArray(single(params.disprate));
+
+%% Setting params
+disprate    = gpuArray(single(100));
 
 
 %% Initializing primal and dual variables

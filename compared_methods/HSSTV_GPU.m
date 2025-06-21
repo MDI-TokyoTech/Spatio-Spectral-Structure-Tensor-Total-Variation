@@ -1,43 +1,40 @@
-%% Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping
-%% =========================== First part notes===========================
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Author: Shingo Takemoto (takemoto.s.e908@m.isct.ac.jp)
 % Last version: June 15, 2025
-% Article: S. Takemoto, K. Naganuma, S. Ono, 
-%   ``Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping''
-% -------------------------------------------------------------------------
-%% =========================== Second part notes =========================== 
-% INPUT:
-%   HSI_noisy: noisy hyperspectral image of size n1*n2*n3 normalized to [0,1]
-%   params: an option structure whose fields are as follows:           
-%       alpha: radius of l_1 ball for sparse noise
-%       beta: radius of l_1 ball for stripe noise
-%       epsilon: radius of l_2 ball serving data-fidelity
-%       blocksize: parameter of block size for spatio-spectral structure tensor
-%       max_iter: maximum number of iterations
-%       stop_cri: stopping criterion of P-PDS
-%       disprate: Period to display intermediate results
-% OUTPUT:
-%   restored_HSI: denoised hyperspectral image
-%   removed_noise: removed noise
-%   iteration: number of P-PDS iteration
-%  ========================================================================
+% Article: Saori Takeyama, Shunsuke Ono, and Itsuo Kumazawa, 
+%   ``A Constrained Convex Optimization Approach to Hyperspectral Image Restoration with Hybrid Spatio-Spectral Regularization,''
+%   Remote Sensing, 2020.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% f(U,S,T) = A_omega(U) + L1ball(S) + L1ball(T) + 
+%               L2ball(U+S+T) + box constraint(U) + Dv(T)=0
+%               s.t. A_omega = (DvDb; DhDb; omega*Dv; omega*Dh)
+%
+% f1(U,S,T) = 0
+% f2(U,S,T) = box constraint(U) + L1ball(S) + L1ball(T)
+% f3(U,S,T) = A_omega(U) + L2ball(U+S+T) + Dv(T)
+%
+% A = (A_omega O O; I I I; O O Dv)
+%
+% Algorithm is based on P-PDS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function [HSI_restored, removed_noise, iteration, converge_rate_U] ...
-     = S3TTV_GPU_fast(HSI_noisy, params)
-fprintf('** Running S3TTV_GPU_fast **\n');
-HSI_noisy = gpuArray(single(HSI_noisy));
+     = HSSTV_GPU(HSI_noisy, params)
+fprintf('** Running HSSTV_GPU **\n');
+HSI_noisy   = gpuArray(single(HSI_noisy));
 [n1, n2, n3] = size(HSI_noisy);
 
+epsilon     = gpuArray(single(params.epsilon));
 alpha       = gpuArray(single(params.alpha));
 beta        = gpuArray(single(params.beta));
-epsilon     = gpuArray(single(params.epsilon));
-blocksize   = gpuArray(single(params.blocksize));
+L           = params.L;
+omega       = gpuArray(single(params.omega));
 maxiter     = gpuArray(single(params.maxiter));
 stopcri     = gpuArray(single(params.stopcri));
 
 %% Setting params
-disprate    = gpuArray(single(100));
-
+disprate    = gpuArray(single(1000));
 
 %% Initializing primal and dual variables
 
@@ -54,20 +51,32 @@ T = zeros([n1, n2, n3], 'single', 'gpuArray');
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % dual variables
-% Y1: term of S3TTV
+% Y1: term of HSSTV
 % Y2: term of l2ball
 % Y3: term of stripe noise
+%
+% Y1 = D(Ds(U))
+% Y2 = U + S + T
+% Y3 = Dv(T)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Y1 = zeros([n1, n2, n3, 2, blocksize(1), blocksize(2)], 'single', 'gpuArray');
+Y1 = zeros([n1, n2, n3, 4], 'single', 'gpuArray');
 Y2 = zeros([n1, n2, n3], 'single', 'gpuArray');
 Y3 = zeros([n1, n2, n3], 'single', 'gpuArray');
-Y4 = zeros([n1, n2, n3], 'single', 'gpuArray');
-Y5 = zeros([n1, n2, n3], 'single', 'gpuArray');
+
+
+%% Setting stepsize parameters for P-PDS
+gamma1_U    = gpuArray(single(1./(2*2 + 2*2 + omega*2 + omega*2 + 1)));
+gamma1_S    = gpuArray(single(1));
+gamma1_T    = gpuArray(single(1/(2 + 1)));
+gamma2_Y1_1 = (1/(2*2)) * ones([n1, n2, n3, 2], 'single', 'gpuArray');
+gamma2_Y1_2 = (1/(omega*2)) * ones([n1, n2, n3, 2], 'single', 'gpuArray');
+gamma2_Y1   = cat(4, gamma2_Y1_1, gamma2_Y1_2);
+gamma2_Y2   = gpuArray(single(1/3));
+gamma2_Y3   = gpuArray(single(1/2));
 
 
 %% Setting operators
-% Difference operators
 D       = @(z) cat(4, z([2:end, 1],:,:) - z, z(:,[2:end, 1],:) - z);
 Dt      = @(z) z([end,1:end-1],:,:,1) - z(:,:,:,1) + z(:,[end,1:end-1],:,2) - z(:,:,:,2);
 Dv      = @(z) z([2:end, 1],:,:) - z;
@@ -75,76 +84,59 @@ Dvt     = @(z) z([end,1:end-1],:,:) - z(:,:,:);
 Ds      = @(z) z(:, :, [2:end, 1], :) - z;
 Dst     = @(z) z(:,:,[end,1:end-1],:) - z(:,:,:,:);
 
-% Expansion operators
-P = @(z) func_PeriodicExpansion(z, blocksize);
-Pt = @(z) func_PeriodicExpansionTrans(z);
+A_omega = @(z) cat(4, D(Ds(z)), omega*D(z));
+A_omegat = @(z) Dst(Dt(z(:,:,:,1:2))) + omega*Dt(z(:,:,:,3:4));
 
 
-%% Setting stepsize parameters for P-PDS
-gamma1_U    = gpuArray(single(1./(prod(blocksize) * 2*2 * 2 + 1)));
-gamma1_S    = gpuArray(single(1));
-gamma1_T    = gpuArray(single(1/(2 + 1)));
-gamma2_Y1   = gpuArray(single(1/(2*2)));
-gamma2_Y2   = gpuArray(single(1));
-gamma2_Y3   = gpuArray(single(1));
-gamma2_Y4   = gpuArray(single(1));
-gamma2_Y5   = gpuArray(single(1/2));
-
+switch L
+    case 'L1' % p = 1, prox of L1 norm
+        Prox_Y1 = @(z) Prox_l1norm(z./gamma2_Y1, 1./gamma2_Y1);
+    case 'L12' % p =2, prox of mixed L1,2 norm
+        Prox_Y1 = @(z) Prox12band(z./gamma2_Y1, 1./gamma2_Y1);
+end
 
 %% main loop (P-PDS)
 converge_rate_U = zeros([1, maxiter], 'single');
 fprintf('~~~ P-PDS STARTS ~~~\n');
 
-for i = 1:maxiter   
+for i = 1:maxiter
+    tic;
+    
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Updating U, S, T
+    % Updating U
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    U_tmp   = U - gamma1_U.*(Dst(Dt(Pt(Y1))) + Y2);
-    S_tmp   = S - gamma1_S.*Y3;
-    T_tmp   = T - gamma1_T.*(Y4 + Dvt(Y5));
+    U_tmp   = U - gamma1_U.*(A_omegat(Y1) + Y2);
+    U_next  = ProjBox(U_tmp, 0, 1);
 
-    Primal_sum = U_tmp + S_tmp + T_tmp;
-    Primal_sum = ProjL2ball(Primal_sum, HSI_noisy, epsilon) - Primal_sum;
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Updating S
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    S_tmp   = S - gamma1_S.*Y2;
+    S_next  = ProjFastL1Ball(S_tmp, alpha);
 
-    U_next = U_tmp + Primal_sum/3;
-    S_next = S_tmp + Primal_sum/3;
-    T_next = T_tmp + Primal_sum/3;
-
-    U_res = 2*U_next - U;
-    S_res = 2*S_next - S;
-    T_res = 2*T_next - T;
-
-
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Updating T
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    T_tmp   = T - gamma1_T.*(Y2 + Dvt(Y3));
+    T_next  = ProjFastL1Ball(T_tmp, beta);
+    
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Updating Y1
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Y1_tmp  = Y1 + gamma2_Y1.*(P(D(Ds(2*U_next - U))));
-    Y1_next = Y1_tmp - gamma2_Y1.*Prox_S3TTV(Y1_tmp./gamma2_Y1, 1./gamma2_Y1, blocksize);
+    Y1_tmp  = Y1 + gamma2_Y1.*(A_omega(2*U_next - U));
+    Y1_next = Y1_tmp - gamma2_Y1.*Prox_Y1(Y1_tmp);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Updating Y2
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Y2_tmp  = Y2 + gamma2_Y2.*U_res;
-    Y2_next = Y2_tmp - gamma2_Y2*ProjBox(Y2_tmp/gamma2_Y2, 0, 1);
+    Y2_tmp  = Y2 + gamma2_Y2.*(2*(U_next + S_next + T_next) - (U + S + T));    
+    Y2_next = Y2_tmp - gamma2_Y2.*ProjL2ball(Y2_tmp./gamma2_Y2, HSI_noisy, epsilon);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Updating Y3
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Y3_tmp  = Y3 + gamma2_Y3.*S_res;
-    Y3_next = Y3_tmp - gamma2_Y3.*ProjFastL1Ball(Y3_tmp./gamma2_Y3, alpha);
+    Y3_next = Y3 + gamma2_Y3.*Dv(2*T_next - T);
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Updating Y4
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Y4_tmp  = Y4 + gamma2_Y4.*T_res;
-    Y4_next = Y4_tmp - gamma2_Y4*ProjFastL1Ball(Y4_tmp/gamma2_Y4, beta);
-
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Updating Y5
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    Y5_next = Y5 + gamma2_Y5.*Dv(T_res);
-
-    
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Calculating error
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -160,9 +152,8 @@ for i = 1:maxiter
     Y1  = Y1_next;
     Y2  = Y2_next;
     Y3  = Y3_next;
-    Y4  = Y4_next;
-    Y5  = Y5_next;
 
+ 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Convergence checking
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
