@@ -23,8 +23,9 @@ For more information, see the following
    - `params.maxiter`: Maximum number of iterations
    - `params.disprate`: Period to display intermediate results
  - Set as `use_GPU` = 1 if you use GPU.
+ - Set as `use_fast` = 1 if you use fast convergence version.
 
-2. Run ```main.m```
+2. Run ```main_S3TTV.m```
 
 
 ## Reference
