@@ -98,8 +98,8 @@ end
 
 
 %% Plotting results
-mpsnr_S3TTV  = MPSNR(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
-mssim_S3TTV  = MSSIM(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
+mpsnr_S3TTV  = calc_MPSNR(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
+mssim_S3TTV  = calc_MSSIM(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
 
 fprintf('~~~ RESULTS ~~~\n');
 fprintf('MPSNR: %#.4g\n', mpsnr_S3TTV);
