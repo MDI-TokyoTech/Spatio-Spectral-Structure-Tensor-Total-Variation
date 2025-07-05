@@ -93,11 +93,11 @@ methods_info(end+1) = struct( ...
     "enable", false ...
 );
 
-% HSSTV_L1
+% HSSTV1
 HSSTV_omega = {0.05};
 
 methods_info(end+1) = struct( ...
-    "name", "HSSTV_L1", ...
+    "name", "HSSTV1", ...
     "func", @(HSI_noisy, params) HSSTV_GPU(HSI_noisy, params), ...
     "param_names", {{"L", "omega", "maxiter", "stopcri", "epsilon", "alpha", "beta"}}, ...
     "params", {{{"L1"}, HSSTV_omega, maxiter, stopcri, epsilon, alpha, beta}}, ...
@@ -106,11 +106,11 @@ methods_info(end+1) = struct( ...
     "enable", false ...
 );
 
-% HSSTV_L12
+% HSSTV2
 HSSTV_omega = {0.05};
 
 methods_info(end+1) = struct( ...
-    "name", "HSSTV_L12", ...
+    "name", "HSSTV2", ...
     "func", @(HSI_noisy, params) HSSTV_GPU(HSI_noisy, params), ...
     "param_names", {{"L", "omega", "maxiter", "stopcri", "epsilon", "alpha", "beta"}}, ...
     "params", {{{"L12"}, HSSTV_omega, maxiter, stopcri, epsilon, alpha, beta}}, ...
@@ -206,7 +206,7 @@ methods_info(end+1) = struct( ...
     "params", {{TPTV_Rank, TPTV_initial_rank, TPTV_maxIter, TPTV_lambdas}}, ...
     "get_params_savetext", @(params) ...
         sprintf("maxiter%d_l%.4g", params.maxIter, params.lambda), ...
-    "enable", false ...
+    "enable", true ...
 );
 
 % FastHyMix
@@ -230,62 +230,60 @@ i_method = 0;
 
 %% Running methods
 for idx_method = 1:num_methods
-name_method = methods_info(idx_method).name;
-func_method = methods_info(idx_method).func;
-params_name = methods_info(idx_method).param_names;
-params_cell = methods_info(idx_method).params;
+    name_method = methods_info(idx_method).name;
+    func_method = methods_info(idx_method).func;
+    params_name = methods_info(idx_method).param_names;
+    params_cell = methods_info(idx_method).params;
 
-[params_comb, num_params_comb] = ParamsList2Comb(params_cell);
-
-
-for idx_params_comb = 1:num_params_comb
-
-params = struct();
-for idx_params = 1:numel(params_name)
-    % Assigning parameters to the structure
-    params.(params_name{idx_params}) = params_comb{idx_params_comb}{idx_params};
-end
-
-name_params_savetext = methods_info(idx_method).get_params_savetext(params);
-
-
-fprintf("\n~~~ SETTINGS ~~~\n");
-fprintf("Method: %s\n", name_method);
-fprintf("Parameter settings: %s\n", name_params_savetext)
-fprintf("Methods: (%d/%d), Params:(%d/%d)\n", ...
-    idx_method, num_methods, idx_params_comb, num_params_comb);
-
-[HSI_restored, ~] = func_method(HSI_noisy, params);
-
-
-% Plotting results
-val_mpsnr  = MPSNR(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
-val_mssim  = MSSIM(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
-
-fprintf("~~~ RESULTS ~~~\n");
-fprintf("MPSNR: %#.4g\n", val_mpsnr);
-fprintf("MSSIM: %#.4g\n", val_mssim);
-
-
-save_folder_name = append(...
-    "./result/", ...
-    "denoising_", image, "/", ...
-    "g", num2str(deg.Gaussian_sigma), "_ps", num2str(deg.sparse_rate), ...
-        "_pt", num2str(deg.stripe_rate), "/", ...
-    name_method, "/", ...
-    name_params_savetext, "/" ...   
-);
-
-mkdir(save_folder_name);
-
-save(append(save_folder_name, "restored_result.mat"), ...
-    "HSI_restored", "val_mpsnr", "val_mssim", ...
-    "-v7.3", "-nocompression" ...
-);
-
-close all
-
-end
+    save_folder_name = append(...
+            "./result/", ...
+            image, "/", ...
+            "g", num2str(deg.Gaussian_sigma), "_ps", num2str(deg.sparse_rate), ...
+                "_pt", num2str(deg.stripe_rate), "/", ...
+            name_method, "/" ...
+        );
+    mkdir(save_folder_name);
+    
+    
+    [params_comb, num_params_comb] = ParamsList2Comb(params_cell);
+    
+    
+    for idx_params_comb = 1:num_params_comb
+    
+        params = struct();
+        for idx_params = 1:numel(params_name)
+            % Assigning parameters to the structure
+            params.(params_name{idx_params}) = params_comb{idx_params_comb}{idx_params};
+        end
+        
+        name_params_savetext = methods_info(idx_method).get_params_savetext(params);
+        
+        
+        fprintf("\n~~~ SETTINGS ~~~\n");
+        fprintf("Method: %s\n", name_method);
+        fprintf("Parameter settings: %s\n", name_params_savetext)
+        fprintf("Methods: (%d/%d), Params:(%d/%d)\n", ...
+            idx_method, num_methods, idx_params_comb, num_params_comb);
+        
+        [HSI_restored, ~] = func_method(HSI_noisy, params);
+        
+        
+        % Plotting results
+        val_mpsnr  = calc_MPSNR(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
+        val_mssim  = calc_MSSIM(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
+        
+        fprintf("~~~ RESULTS ~~~\n");
+        fprintf("MPSNR: %#.4g\n", val_mpsnr);
+        fprintf("MSSIM: %#.4g\n", val_mssim);
+        
+        save(append(save_folder_name, name_params_savetext, ".mat"), ...
+            "HSI_restored", "val_mpsnr", "val_mssim", ...
+            "-v7.3", "-nocompression" ...
+        );
+        
+        close all
+    
+    end
 end
 
 fprintf('******* finis *******\n');

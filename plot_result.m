@@ -25,15 +25,41 @@ image = 'JasperRidge';
 % image = 'PaviaUniversity';
 % image = 'Beltsville';
 
-show_band = 53;
+show_band = 53; % Select band for show
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+switch image
+    case 'JasperRidge'
+        load('./dataset/JasperRidge.mat');
+
+    case 'PaviaUniversity'
+        load('./dataset/PaviaUniversity.mat');
+
+    case 'Beltsville'
+        load('./dataset/Beltsville.mat');
+end
+
+[HSI_noisy, deg] = Generate_obsv(HSI_clean, deg);
+
+image_clean = HSI_clean(:,:,show_band);
+image_noisy = HSI_noisy(:,:,show_band);
+
+[n1, n2] = size(image_clean);
+
+
 edge_width = 3;
+
+fprintf("\n~~~ CONDITION SETTINGS ~~~\n");
+fprintf("Image: %s \n", image);
+fprintf("Gaussian sigma: %g\n", deg.Gaussian_sigma);
+fprintf("Sparse rate: %g\n", deg.sparse_rate);
+fprintf("Stripe rate: %g\n", deg.stripe_rate);
+fprintf("Stripe intensity: %g\n", deg.stripe_intensity);
 
 
 dir_result_folder = append(...
     "./result/", ...
-    "denoising_", image, "/", ...
+    image, "/", ...
     "g", num2str(deg.Gaussian_sigma), "_ps", num2str(deg.sparse_rate), ...
         "_pt", num2str(deg.stripe_rate), "/" ...   
 );
@@ -43,51 +69,51 @@ dir_result_folder = append(...
 % SSTV
 methods_info(1) = struct( ...
     "name", "SSTV", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 % HSSTV_L1
 methods_info(end+1) = struct( ...
-    "name", "HSSTV_L1", ...
-    "enable", true ...
+    "name", "HSSTV1", ...
+    "enable", false ...
 );
 
 % HSSTV_L12
 methods_info(end+1) = struct( ...
-    "name", "HSSTV_L12", ...
-    "enable", true ...
+    "name", "HSSTV2", ...
+    "enable", false ...
 );
 
 % l0l1HTV
 methods_info(end+1) = struct( ...
     "name", "l0l1HTV", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 % STV
 methods_info(end+1) = struct( ...
     "name", "STV", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 
 % SSST
 methods_info(end+1) = struct( ...
     "name", "SSST", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 
 % LRTDTV
 methods_info(end+1) = struct( ...
     "name", "LRTDTV", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 % FGSLR
 methods_info(end+1) = struct( ...
     "name", "FGSLR", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 % TPTV
@@ -106,13 +132,13 @@ methods_info(end+1) = struct( ...
 % FastHyMix
 methods_info(end+1) = struct( ...
     "name", "FastHyMix", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 % S3TTV (ours)
 methods_info(1) = struct( ...
     "name", "S3TTV", ...
-    "enable", true ...
+    "enable", false ...
 );
 
 methods_info = methods_info([methods_info.enable]); % removing false methods
@@ -121,62 +147,104 @@ num_methods = numel(methods_info);
 i_method = 0;
 
 
+%% Choosing best paramters for each method
+% Initialiging
 vals_mpsnr = zeros(num_methods, 1);
 vals_mssim = zeros(num_methods, 1);
 
+cat_images = zeros([n1, n2, num_methods+2]);
+cat_images(:,:,1) = image_clean;
+cat_images(:,:,2) = image_noisy;
 
-%% Running methods
+names_params_best = cell(num_methods, 1);
+
+
 for idx_method = 1:num_methods
-name_method = methods_info(idx_method).name;
+    name_method = methods_info(idx_method).name;
+    fprintf("\n~~ Choosing the parameters for %s ~~\n", name_method);
+    
+    
+    dir_method_folder = fullfile(dir_result_folder, name_method);
+    
+    names_params_tmp = dir(fullfile(dir_method_folder, '*.mat'));
+    names_params = {names_params_tmp.name};
+    
+    
+    val_max_mpsnr = 0;
+    name_params_best = strings(1);
+    
+    % Searching best parameters for mpsnr
+    for i = 1:numel(names_params)
+        name_params = names_params{i};
+    
+        load(fullfile(dir_method_folder, name_params), "val_mpsnr");
+    
+    
+        if val_max_mpsnr < val_mpsnr
+            val_max_mpsnr = val_mpsnr;
+            name_params_best = name_params;
+        end
+    end
+
+    fprintf("Best paramter of %s: %s", name_method, name_params_best);
+    
+    
+    % Extracting best result
+    load(fullfile(dir_method_folder, name_params_best));
+
+    vals_mpsnr(idx_method)          = val_mpsnr;
+    vals_mssim(idx_method)          = val_mssim;
+    cat_images(:,:,idx_method+2)    = HSI_restored(:,:,show_band);
+    names_params_best{idx_method}   = name_params_best;
+end
 
 
-dir_method_folder = fullfile(dir_result_folder, name_method);
+%% Plotting evaluation results
+% Preparing
+name_length_max = max(strlength([methods_info.name]));
+name_params_length_max = max(strlength(names_params_best));
 
-names_params_tmp = dir(fullfile(dir_method_folder, '*.mat'));
+fprintf("\n\n~~~ SETTINGS ~~~\n");
+fprintf("Image: %s Size: (%d, %d, %d)\n", image, hsi.n1, hsi.n2, hsi.n3);
+fprintf("Gaussian sigma: %g\n", deg.Gaussian_sigma);
+fprintf("Sparse rate: %g\n", deg.sparse_rate);
+fprintf("Stripe rate: %g\n", deg.stripe_rate);
+fprintf("Stripe intensity: %g\n", deg.stripe_intensity);
 
-
-names_params = {names_params_tmp.name};
-
-
-best_name_params = 
-
-fprintf("\n~~~ SETTINGS ~~~\n");
-fprintf("Method: %s\n", name_method);
-fprintf("Parameter settings: %s\n", name_params_savetext)
-fprintf("Methods: (%d/%d), Params:(%d/%d)\n", ...
-    idx_method, num_methods, idx_params_comb, num_params_comb);
-
-[HSI_restored, ~] = func_method(HSI_noisy, params);
-
-
-% Plotting results
-val_mpsnr  = MPSNR(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
-val_mssim  = MSSIM(HSI_restored(:, :, edge_width+1:end-edge_width), HSI_clean(:, :, edge_width+1:end-edge_width));
 
 fprintf("~~~ RESULTS ~~~\n");
-fprintf("MPSNR: %#.4g\n", val_mpsnr);
-fprintf("MSSIM: %#.4g\n", val_mssim);
+fprintf("%s  \t MPSNR\t MSSIM\n", blanks(name_length_max + name_params_length_max + 2));
 
 
-save_folder_name = append(...
-    "./result/", ...
-    "denoising_", image, "/", ...
-    "g", num2str(deg.Gaussian_sigma), "_ps", num2str(deg.sparse_rate), ...
-        "_pt", num2str(deg.stripe_rate), "/", ...
-    name_method, "/", ...
-    name_params_savetext, "/" ...   
-);
+for idx_method = 1:num_methods
+    name_method = methods_info(idx_method).name;
+    name_params_best = names_params_best{idx_method};
 
-mkdir(save_folder_name);
-
-save(append(save_folder_name, "restored_result.mat"), ...
-    "HSI_restored", "val_mpsnr", "val_mssim", ...
-    "-v7.3", "-nocompression" ...
-);
-
-close all
-
+    fprintf("%s(%s): \t %#.4g\t %#.4g\n", ...
+        append(name_method, blanks(name_length_max - strlength(name_method))), ...
+        append(name_params_best, blanks(name_params_length_max - strlength(name_params_best))), ...
+        val_mpsnr, val_mssim);
 end
+
+
+%% Showing result images
+figure;
+subplot(1, num_methods+2, 1)
+imshow(image_clean)
+title("GT")
+
+subplot(1, num_methods+2, 2)
+imshow(image_noisy)
+title("Noisy")
+
+
+for idx_method = 1:num_methods
+    name_method = methods_info(idx_method).name;
+
+    subplot(1, num_methods+2, idx_method+2)
+    imshow(cat_images(:,:,idx_method+2))
+    title(name_method)
 end
+
 
 fprintf('******* finis *******\n');

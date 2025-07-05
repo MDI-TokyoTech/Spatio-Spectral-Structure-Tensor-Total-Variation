@@ -64,17 +64,17 @@ To compare with other methods (**SSTV** [2], **HSSTV** [3], **l0-l1HTV** [4], **
 
 1. Download and extract the following repositories, and place each extracted folder into the `compared_methods/` directory:
 
-- **LRTDTV**  
-  [https://github.com/zhaoxile/Hyperspectral-Image-Restoration-via-Total-Variation-Regularized-Low-rank-Tensor-Decomposition](https://github.com/zhaoxile/Hyperspectral-Image-Restoration-via-Total-Variation-Regularized-Low-rank-Tensor-Decomposition)
+    - **LRTDTV**  
+      [https://github.com/zhaoxile/Hyperspectral-Image-Restoration-via-Total-Variation-Regularized-Low-rank-Tensor-Decomposition](https://github.com/zhaoxile/Hyperspectral-Image-Restoration-via-Total-Variation-Regularized-Low-rank-Tensor-Decomposition)
 
-- **FGSLR**  
-  [https://chenyong1993.github.io/yongchen.github.io/](https://chenyong1993.github.io/yongchen.github.io/)
+    - **FGSLR**  
+      [https://chenyong1993.github.io/yongchen.github.io/](https://chenyong1993.github.io/yongchen.github.io/)
 
-- **TPTV**  
-  [https://github.com/chuchulyf/ETPTV](https://github.com/chuchulyf/ETPTV)
+    - **TPTV**  
+      [https://github.com/chuchulyf/ETPTV](https://github.com/chuchulyf/ETPTV)
 
-- **FastHyMix**  
-  [https://github.com/LinaZhuang/HSI-MixedNoiseRemoval-FastHyMix](https://github.com/LinaZhuang/HSI-MixedNoiseRemoval-FastHyMix)
+    - **FastHyMix**  
+      [https://github.com/LinaZhuang/HSI-MixedNoiseRemoval-FastHyMix](https://github.com/LinaZhuang/HSI-MixedNoiseRemoval-FastHyMix)
 
 2. Run `main_with_comparisons.m`
  - Choose the target image (`JasperRidge`, `PaviaUniversity`, or `Beltsville`)
@@ -83,7 +83,7 @@ To compare with other methods (**SSTV** [2], **HSSTV** [3], **l0-l1HTV** [4], **
 
 3. Run the result visualization script: `plot_result.m`
 - Use `show_band` to select the band index for visualization
-- The script compares results in `result/<name_method>/` and selects the best result for each method
+- The script compares results in `result/<condition>/<name_method>/` and selects the best result for each method
 
 
 
