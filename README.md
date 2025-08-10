@@ -7,7 +7,7 @@ S. Takemoto, K. Naganuma, and S. Ono,
 _IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing_, 2025.
 
 Update history:
-Jul. 5, 2025: v1.0 
+10, Aug. 2025: v1.0 
 
 For more information, see the following
 
@@ -33,13 +33,15 @@ For more information, see the following
 If you use this code, please cite the following paper:
 
 ```
-@misc{Takemoto2024Spatio,
-      title={Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping}, 
-      author={Takemoto, Shingo and Ono, Shunsuke},
-      year={2024},
-      eprint={2308.00500},
-      archivePrefix={arXiv},
-      primaryClass={eess.SP}
+@ARTICLE{takemoto2025spatiospectral,
+  author={Takemoto, Shingo and Naganuma, Kazuki and Ono, Shunsuke},
+  journal={IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing}, 
+  title={Spatio-Spectral Structure Tensor Total Variation for Hyperspectral Image Denoising and Destriping}, 
+  year={2025},
+  volume={18},
+  number={},
+  pages={19157-19175},
+  doi={10.1109/JSTARS.2025.3586779}
 }
 ```
 
